@@ -1,6 +1,8 @@
-# AutoChat — Week 1 (BMW RAG)
+# MultitenantChatbot
 
-## What you're building this week
+Learning project: multi-tenant RAG chatbot over automotive investor reports, with authentication and tenant isolation.
+
+## Week 1 focus (BMW only)
 
 A **basic chatbot** that answers questions using **only BMW investor PDFs**.
 
@@ -23,13 +25,13 @@ PDFs are too long to paste into the model every time. So we:
 
 **“Correct chunks”** means: for *“What was BMW Group revenue in 2024?”*, the top results should be passages that actually discuss 2024 revenue — not a random page about motorcycles.
 
-You can verify this in the UI: expand **Retrieved chunks (sources)** and check document + page + score.
+You can verify this in the CLI/UI output under **Retrieved chunks** — check document + page + score.
 
 If retrieval is wrong, the answer will be wrong even if the LLM is smart. That's the main Week 1 learning.
 
 ## Setup
 
-1. Prefer **64-bit Python 3.10+** (your current 32-bit 3.8 works for CLI RAG; Streamlit needs 64-bit).
+1. Prefer **64-bit Python 3.10+** (32-bit Python 3.8 works for CLI RAG; Streamlit needs 64-bit).
 2. From the project root:
 
 ```bash
@@ -42,6 +44,8 @@ copy .env.example .env
 ```text
 OPENAI_API_KEY=sk-...
 ```
+
+4. Place BMW PDFs in `data/bmw/` (kept out of git because they are large).
 
 ## Step A — Ingest BMW PDFs into the vector store
 
@@ -84,14 +88,15 @@ Try questions like:
 ingestion/     PDF load, chunk, embed, run_ingest.py
 retrieval/     vector store + retriever
 chat/          LLM answer using retrieved context
-app/           Streamlit UI
-data/bmw/      source PDFs
-storage/bmw/   saved chunks + embeddings
+app/           CLI + Streamlit UI
+data/bmw/      source PDFs (local only)
+storage/bmw/   saved chunks + embeddings (local only)
+PRD.md         full product requirements
 ```
 
 ## Success check for Week 1
 
 - [ ] Ingestion finishes without errors
-- [ ] Chat UI opens
+- [ ] Chat runs in CLI
 - [ ] A factual question returns an answer grounded in BMW text
 - [ ] Retrieved chunks look relevant (right topic / year / document)

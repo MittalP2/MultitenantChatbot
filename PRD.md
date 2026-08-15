@@ -4,9 +4,9 @@
 
 | Field | Value |
 | --- | --- |
-| **Product name** | AutoChat (working title) |
+| **Product name** | AutoChat |
 | **Document type** | Product Requirements Document |
-| **Status** | Draft |
+| **Status** | Week 1 complete (v1) — BMW RAG chatbot; later weeks add tenants + auth |
 | **Audience** | Builder / learner (PM learning RAG, vector DBs, and security) |
 | **Timeline** | 6 weeks (MVP → portfolio-ready) |
 | **Primary goal** | Learn RAG, vector databases, and tenant isolation by building a multi-tenant enterprise-style chatbot |

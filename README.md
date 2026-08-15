@@ -1,102 +1,151 @@
-# MultitenantChatbot
+# AutoChat
 
-Learning project: multi-tenant RAG chatbot over automotive investor reports, with authentication and tenant isolation.
+Week 1 of a **multi-tenant RAG chatbot** over automotive investor reports.
 
-## Week 1 focus (BMW only)
+This release answers questions from **BMW Group PDFs only**. Retrieval runs on your laptop (TF-IDF). Cursor writes the final answer from the retrieved passages.
 
-A **basic chatbot** that answers questions using **only BMW investor PDFs**.
+**GitHub:** [github.com/MittalP2/MultitenantChatbot](https://github.com/MittalP2/MultitenantChatbot)
 
 ```text
-PDF  →  text chunks  →  embeddings  →  vector store
-                                         ↑
-User question → embed question → find similar chunks → LLM answers from those chunks
+PDF  →  text chunks  →  TF-IDF vectors  →  local store
+                                              ↑
+User question → vectorize → find similar chunks → answer from those chunks
 ```
 
-No login / multi-tenant yet. That's later weeks.
+---
 
-## What “retrieve correct chunks” means
+## Links for submission
 
-PDFs are too long to paste into the model every time. So we:
+| What | Link |
+| --- | --- |
+| GitHub repository | https://github.com/MittalP2/MultitenantChatbot |
+| This README | https://github.com/MittalP2/MultitenantChatbot/blob/main/README.md |
+| Product spec (PRD) | https://github.com/MittalP2/MultitenantChatbot/blob/main/PRD.md |
+| Live showcase (local) | http://127.0.0.1:8765 after `py -3.12 app/showcase_server.py` |
+| Demo video | Add your recording URL here after you upload it |
 
-1. Split each report into small **chunks** of text (with page + filename metadata).
-2. Turn each chunk into an **embedding** (a list of numbers that represent meaning).
-3. When you ask a question, we embed the question the same way.
-4. **Retrieval** = find the chunks whose vectors are closest to the question vector (cosine similarity).
+PDFs and the vector store stay **local** (not in GitHub) because IR reports are copyrighted and large.
 
-**“Correct chunks”** means: for *“What was BMW Group revenue in 2024?”*, the top results should be passages that actually discuss 2024 revenue — not a random page about motorcycles.
+---
 
-You can verify this in the CLI/UI output under **Retrieved chunks** — check document + page + score.
+## What v1 includes
 
-If retrieval is wrong, the answer will be wrong even if the LLM is smart. That's the main Week 1 learning.
+- Ingest BMW investor PDFs into overlapping chunks (document + page metadata)
+- Local TF-IDF retrieval with a BMW `tenant_id` filter
+- Cited answers via Cursor cloud (`CURSOR_API_KEY`), with extractive fallback if no key
+- CLI chatbot and a live HTML showcase for the group demo
+
+**Not in v1** (later weeks): other OEM tenants, login, cross-tenant isolation tests.
+
+---
+
+## Answer routing
+
+1. **Cursor cloud** (`CURSOR_API_KEY`) — preferred; works on Windows
+2. **OpenAI** (`OPENAI_API_KEY`) — optional
+3. **Ollama** — optional local model
+4. **Extractive fallback** — pulls a figure/passage from retrieved text
+
+Retrieval always stays in `storage/bmw/`. Cursor only sees the passages we send.
+
+> Cursor Pro powers chat *inside Cursor*. This app talks to Cursor through the **Cursor SDK / cloud API** (`CURSOR_API_KEY`), not the IDE chat window. Leave `CURSOR_RUNTIME=cloud` on Windows.
+
+---
 
 ## Setup
 
-1. Prefer **64-bit Python 3.10+** (32-bit Python 3.8 works for CLI RAG; Streamlit needs 64-bit).
-2. From the project root:
+Python **3.10+** (3.12 recommended):
 
 ```bash
-python -m pip install -r requirements.txt
-copy .env.example .env
+py -3.12 -m pip install -r requirements.txt
 ```
 
-3. Put your OpenAI API key in `.env`:
+Put BMW PDFs in `data/bmw/` (see [data/MANUAL_DOWNLOADS.md](data/MANUAL_DOWNLOADS.md)). Then:
+
+```env
+CURSOR_API_KEY=cursor_...
+CURSOR_MODEL=composer-2.5
+```
+
+Copy [`.env.example`](.env.example) to `.env` and fill in the key from [cursor.com/dashboard/integrations](https://cursor.com/dashboard/integrations).
+
+Ingest once (or again after adding PDFs):
+
+```bash
+py -3.12 ingestion/run_ingest.py
+```
+
+---
+
+## Demo (record this)
+
+About 2–3 minutes. Have `.env` and `storage/bmw/` already built so you are not waiting on ingest.
+
+**1. Start the showcase**
+
+```bash
+py -3.12 app/showcase_server.py
+```
+
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
+
+**2. Say this once**
+
+> AutoChat finds the right BMW report pages locally, then Cursor writes a short answer with citations. Next weeks add more carmakers and real tenant isolation.
+
+**3. Ask these two questions** (30–90 seconds each while Cursor writes)
+
+1. *How many employees in BMW Group in 2025?*
+2. *What were BMW Group revenues in 2025?*
+
+Point at the **Sources** line under the answer (document + page). Optional third chip: *Automotive EBIT margin in 2025*.
+
+**4. Optional CLI clip** (if you want a terminal shot)
+
+```bash
+py -3.12 app/cli_chat.py "What was BMW Group revenue in 2025?"
+```
+
+Do **not** double-click the HTML file for the live demo — the server must be running.
+
+---
+
+## Other ways to run
+
+```bash
+py -3.12 app/cli_chat.py
+py -3.12 app/cli_chat.py --chunks "How many employees in BMW Group in 2025?"
+```
+
+Streamlit is optional (`pip install streamlit` then `py -3.12 -m streamlit run app/streamlit_app.py`).
+
+---
+
+## Project layout
 
 ```text
-OPENAI_API_KEY=sk-...
+AutoChat/
+├── app/                 # CLI, Streamlit, showcase server
+├── chat/                # Answer routing (Cursor → fallback)
+├── ingestion/           # PDF load, chunk, TF-IDF
+├── retrieval/           # Vector store + retriever
+├── docs/week1-showcase.html
+├── data/{bmw,...}/      # PDFs (local only)
+├── storage/bmw/         # Index (local only)
+└── PRD.md
 ```
 
-4. Place BMW PDFs in `data/bmw/` (kept out of git because they are large).
+---
 
-## Step A — Ingest BMW PDFs into the vector store
+## Success check (Week 1)
 
-```bash
-python ingestion/run_ingest.py
-```
+- [x] Ingestion finishes
+- [x] CLI / showcase runs
+- [x] Retrieved chunks look relevant
+- [x] Answers include sources (document + page)
 
-This reads `data/bmw/*.pdf`, chunks them, embeds them, and saves to `storage/bmw/`.
+---
 
-## Step B — Run the chatbot (CLI)
+## License
 
-```bash
-python app/cli_chat.py
-```
-
-Or one-shot:
-
-```bash
-python app/cli_chat.py "What was BMW Group revenue in 2024?"
-```
-
-Look at **RETRIEVED CHUNKS** — that is how you judge whether retrieval found the right passages.
-
-### Optional Streamlit UI (64-bit Python only)
-
-```bash
-python -m pip install "streamlit>=1.28.0,<1.40.0"
-streamlit run app/streamlit_app.py
-```
-
-Try questions like:
-
-- What was BMW Group revenue in 2024?
-- How many cars did BMW deliver?
-- What does the report say about electric vehicles?
-
-## Project layout (Week 1)
-
-```text
-ingestion/     PDF load, chunk, embed, run_ingest.py
-retrieval/     vector store + retriever
-chat/          LLM answer using retrieved context
-app/           CLI + Streamlit UI
-data/bmw/      source PDFs (local only)
-storage/bmw/   saved chunks + embeddings (local only)
-PRD.md         full product requirements
-```
-
-## Success check for Week 1
-
-- [ ] Ingestion finishes without errors
-- [ ] Chat runs in CLI
-- [ ] A factual question returns an answer grounded in BMW text
-- [ ] Retrieved chunks look relevant (right topic / year / document)
+MIT. Investor-report PDFs are **not** redistributed in this repo; download them from each OEM’s IR site.

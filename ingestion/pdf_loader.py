@@ -12,6 +12,12 @@ def load_pdf(path: Path) -> List[Dict]:
     {text, page, document, path}
     """
     reader = PdfReader(str(path))
+    # Many IR PDFs are "encrypted" with an empty user password (print/copy flags).
+    if getattr(reader, "is_encrypted", False):
+        try:
+            reader.decrypt("")
+        except Exception:
+            pass
     pages = []
     for i, page in enumerate(reader.pages, start=1):
         text = page.extract_text() or ""

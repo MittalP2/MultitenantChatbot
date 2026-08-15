@@ -28,13 +28,12 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg.get("sources"):
-            with st.expander("Retrieved chunks (sources)"):
+            with st.expander("Sources"):
                 for s in msg["sources"]:
                     st.markdown(
                         f"- **{s['document']}** p.{s['page']} "
                         f"(score {s['score']:.3f})"
                     )
-                    st.write(s["text"][:400] + ("…" if len(s["text"]) > 400 else ""))
 
 question = st.chat_input("Ask about BMW reports… e.g. What was Group revenue in 2024?")
 if question:
@@ -43,7 +42,7 @@ if question:
         st.markdown(question)
 
     with st.chat_message("assistant"):
-        with st.spinner("Retrieving chunks + generating answer…"):
+        with st.spinner("Thinking…"):
             try:
                 answer, chunks = answer_question(question, top_k=5, tenant_id="bmw")
             except Exception as e:
@@ -54,18 +53,16 @@ if question:
                 "document": c["document"],
                 "page": c["page"],
                 "score": c["score"],
-                "text": c["text"],
             }
             for c in chunks
         ]
         if sources:
-            with st.expander("Retrieved chunks (sources)"):
+            with st.expander("Sources"):
                 for s in sources:
                     st.markdown(
                         f"- **{s['document']}** p.{s['page']} "
                         f"(score {s['score']:.3f})"
                     )
-                    st.write(s["text"][:400] + ("…" if len(s["text"]) > 400 else ""))
 
     st.session_state.messages.append(
         {"role": "assistant", "content": answer, "sources": sources}

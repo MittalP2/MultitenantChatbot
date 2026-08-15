@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoChat · Week 1 Showcase</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f4f3ee;
+      --bg-2: #eceae4;
+      --card: #fffcf7;
+      --line: #e4e0d8;
+      --text: #1f1e1d;
+      --muted: #6f6b64;
+      --accent: #1c4ed8;
+      --accent-soft: #dce6fb;
+      --accent-ink: #163a9c;
+      --good: #3d6b4f;
+      --shadow: 0 10px 40px rgba(60, 45, 30, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    h1, h2 {
+      font-family: Newsreader, Georgia, serif;
+      font-weight: 550;
+      letter-spacing: -0.02em;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 420px) 1fr;
+      min-height: 100vh;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { max-height: none; border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+    aside {
+      padding: 36px 28px 28px;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, #f7f5f0 0%, var(--bg) 100%);
+      overflow: auto;
+    }
+    .kicker {
+      color: var(--accent);
+      letter-spacing: .14em;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    h1 { font-size: 32px; margin: 10px 0 12px; line-height: 1.15; }
+    .lede { color: var(--muted); margin: 0 0 22px; }
+    h2 { font-size: 18px; margin: 22px 0 10px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 0 rgba(255,255,255,.7) inset;
+    }
+    .card p { margin: 6px 0 0; color: var(--muted); font-size: 14.5px; }
+    .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .pill {
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+    .arrow { color: var(--muted); }
+    .who { font-weight: 600; color: var(--good); }
+    .who.cursor { color: var(--accent); }
+    footer { color: var(--muted); font-size: 12px; margin-top: 18px; }
+    footer a { color: var(--accent-ink); }
+    code { font-size: 12.5px; background: var(--bg-2); padding: 1px 5px; border-radius: 4px; }
+
+    .chat-wrap {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background: var(--bg);
+    }
+    .chat-bar {
+      padding: 18px 28px 10px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+    .chat-bar h2 { margin: 0; font-size: 22px; }
+    .status {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .status.ok { color: var(--good); }
+    .status.bad { color: var(--accent); }
+    .msgs {
+      flex: 1;
+      overflow: auto;
+      padding: 24px 28px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .msg { max-width: 720px; }
+    .msg.user { align-self: flex-end; }
+    .bubble {
+      border-radius: 18px;
+      padding: 12px 16px;
+      white-space: pre-wrap;
+    }
+    .msg.user .bubble {
+      background: var(--accent-soft);
+      color: var(--text);
+    }
+    .msg.bot .bubble {
+      background: transparent;
+      padding: 0;
+    }
+    .sources {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .composer {
+      padding: 12px 28px 22px;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    .chip {
+      border: 1px solid var(--line);
+      background: var(--card);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--text); }
+    form {
+      display: flex;
+      gap: 8px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 8px 8px 8px 16px;
+      box-shadow: var(--shadow);
+    }
+    input[type="text"] {
+      flex: 1;
+      border: 0;
+      outline: none;
+      background: transparent;
+      font: inherit;
+      font-size: 16px;
+      color: var(--text);
+    }
+    button.send {
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      border-radius: 14px;
+      padding: 10px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.send:disabled { opacity: .5; cursor: default; }
+    .thinking { color: var(--muted); font-style: italic; }
+    .banner {
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      padding: 10px 28px;
+      font-size: 14px;
+      display: none;
+    }
+    .banner.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="kicker">v1 · Week 1 showcase</div>
+      <h1>AutoChat</h1>
+      <p class="lede">BMW investor-report Q&amp;A. Local retrieval finds the page; Cursor writes the answer.</p>
+
+      <h2>What we shipped</h2>
+      <div class="card"><strong>Ingest BMW PDFs</strong><p>Split into chunks with document + page labels.</p></div>
+      <div class="card"><strong>Local retriever</strong><p>Your laptop matches the question to those passages. Not Ollama, not Cursor’s index.</p></div>
+      <div class="card"><strong>Cited answers</strong><p>Cursor phrases a readable reply from the retrieved text only.</p></div>
+
+      <h2>How a question travels</h2>
+      <div class="card">
+        <div class="flow">
+          <span class="pill">PDF</span><span class="arrow">→</span>
+          <span class="pill">Chunks</span><span class="arrow">→</span>
+          <span class="pill">Local index</span><span class="arrow">→</span>
+          <span class="pill">Closest pages</span><span class="arrow">→</span>
+          <span class="pill">Cursor writes</span>
+        </div>
+      </div>
+
+      <h2>Who does what</h2>
+      <div class="card">
+        <div class="who">Local app — librarian</div>
+        <p>Creates and searches chunks in <code>storage/bmw/</code>.</p>
+      </div>
+      <div class="card">
+        <div class="who cursor">Cursor — writer</div>
+        <p>Does not store BMW embeddings. It only sees the passages we send.</p>
+      </div>
+
+      <h2>Demo questions</h2>
+      <div class="card"><strong>Employees 2025</strong><p>Ask the first chip. Wait 30–90s. Point at Sources (document + page).</p></div>
+      <div class="card"><strong>Revenues 2025</strong><p>Second chip. Same flow: retrieve locally, Cursor writes.</p></div>
+
+      <h2>What’s next</h2>
+      <div class="card"><strong>More tenants</strong><p>Toyota, Mercedes, Ford, Honda — isolated.</p></div>
+      <div class="card"><strong>Auth + security tests</strong><p>Login maps to tenant_id. Prove no cross-tenant leakage.</p></div>
+
+      <footer>
+        GitHub: <a href="https://github.com/MittalP2/MultitenantChatbot">MittalP2/MultitenantChatbot</a><br />
+        Run: <code>py -3.12 app/showcase_server.py</code>
+      </footer>
+    </aside>
+
+    <section class="chat-wrap">
+      <div class="chat-bar">
+        <h2>Try the chatbot</h2>
+        <div id="status" class="status">Checking connection…</div>
+      </div>
+      <div id="banner" class="banner">This chat needs the local server. In a terminal run <code>py -3.12 app/showcase_server.py</code> then refresh.</div>
+      <div id="msgs" class="msgs">
+        <div class="msg bot">
+          <div class="bubble">Ask about BMW Group reports. Example: how many employees at year-end 2025? Answers take about 30–90 seconds.</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="chips">
+          <button class="chip" type="button" data-q="How many employees in BMW Group in 2025?">Employees 2025</button>
+          <button class="chip" type="button" data-q="What were BMW Group revenues in 2025?">Revenues 2025</button>
+          <button class="chip" type="button" data-q="What was the Automotive EBIT margin in 2025?">EBIT margin 2025</button>
+        </div>
+        <form id="form">
+          <input id="q" type="text" autocomplete="off" placeholder="Ask a question about BMW reports…" />
+          <button class="send" id="send" type="submit">Send</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const msgs = document.getElementById("msgs");
+    const form = document.getElementById("form");
+    const input = document.getElementById("q");
+    const sendBtn = document.getElementById("send");
+    const statusEl = document.getElementById("status");
+    const banner = document.getElementById("banner");
+    let busy = false;
+
+    function add(role, html) {
+      const wrap = document.createElement("div");
+      wrap.className = "msg " + role;
+      wrap.innerHTML = html;
+      msgs.appendChild(wrap);
+      msgs.scrollTop = msgs.scrollHeight;
+      return wrap;
+    }
+
+    async function ping() {
+      try {
+        const r = await fetch("/api/health");
+        if (!r.ok) throw new Error();
+        const data = await r.json();
+        if (data.store === false) {
+          statusEl.textContent = "Connected · run ingestion first";
+          statusEl.className = "status bad";
+          banner.classList.add("show");
+          banner.textContent = "Index missing. In a terminal run py -3.12 ingestion/run_ingest.py then refresh.";
+          return false;
+        }
+        statusEl.textContent = "Connected · BMW tenant";
+        statusEl.className = "status ok";
+        banner.classList.remove("show");
+        return true;
+      } catch {
+        statusEl.textContent = "Server not running";
+        statusEl.className = "status bad";
+        banner.classList.add("show");
+        banner.textContent = "This chat needs the local server. In a terminal run py -3.12 app/showcase_server.py then refresh.";
+        return false;
+      }
+    }
+
+    async function ask(question) {
+      if (!question || busy) return;
+      busy = true;
+      sendBtn.disabled = true;
+      add("user", '<div class="bubble"></div>').querySelector(".bubble").textContent = question;
+      const thinking = add("bot", '<div class="bubble thinking">Finding passages, then asking Cursor…</div>');
+      try {
+        const r = await fetch("/api/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question }),
+        });
+        const data = await r.json();
+        thinking.remove();
+        if (!r.ok) throw new Error(data.error || "Request failed");
+        const src = (data.sources || [])
+          .map((s) => s.document + " p." + s.page)
+          .join(" · ");
+        const el = add("bot", '<div class="bubble"></div>' + (src ? '<div class="sources"></div>' : ""));
+        el.querySelector(".bubble").textContent = data.answer;
+        if (src) el.querySelector(".sources").textContent = "Sources: " + src;
+      } catch (e) {
+        thinking.remove();
+        add("bot", '<div class="bubble"></div>').querySelector(".bubble").textContent =
+          "Could not get an answer. Start the showcase server, then try again.\n" + e.message;
+        ping();
+      } finally {
+        busy = false;
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      input.value = "";
+      ask(q);
+    });
+    document.querySelectorAll(".chip").forEach((btn) => {
+      btn.addEventListener("click", () => ask(btn.dataset.q));
+    });
+    ping();
+  </script>
+</body>
+</html>

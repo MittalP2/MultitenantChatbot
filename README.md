@@ -65,6 +65,8 @@ Use the 12 questions in [eval/queries.json](eval/queries.json). A hit is a retri
 
 Run the **same** question on the **fixed agent** and the **semantic agent**.
 
+Fill the Lyzr report as you go: [eval/LYZR_COMPARISON.md](eval/LYZR_COMPARISON.md). Lyzr does not generate this file automatically.
+
 Examples:
 
 - What products and services does Tesla sell besides electric cars?

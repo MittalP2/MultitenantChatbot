@@ -21,6 +21,26 @@ Save into `data/bmw/`:
 
 Then run `py -3.12 ingestion/run_ingest.py`.
 
+## Week 2 — SEC 10-K extracts (3 small files)
+
+Full 10-K HTML on EDGAR is often 8–15 MB of iXBRL. The downloader keeps only
+Item 1 (Business), Item 1A (Risk Factors), and Item 7 (MD&A) as `.txt` files.
+
+```bash
+py -3.12 scripts/download_sec_10k.py
+py -3.12 ingestion/run_ingest_sec.py
+py -3.12 eval/run_eval.py
+py -3.12 app/cli_chat.py --tenant sec "What factories does Tesla operate?"
+```
+
+Saves into `data/sec/`:
+
+1. `TSLA_10K_<year>.txt` — Tesla, Inc.
+2. `HOG_10K_<year>.txt` — Harley-Davidson, Inc.
+3. `PII_10K_<year>.txt` — Polaris Inc.
+
+Raw HTML is stored in `data/sec/_raw/` (gitignored). Honda / BMW / Toyota file Form 20-F, not 10-K, so this set uses US auto/powersports filers.
+
 ## Later weeks (already on disk locally; not required for v1)
 
 - `data/toyota/` — 5 PDFs

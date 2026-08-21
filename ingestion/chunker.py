@@ -35,6 +35,7 @@ def chunk_pages(
                         "document": page["document"],
                         "page": page["page"],
                         "chunk_id": chunk_id,
+                        "strategy": "fixed",
                     }
                 )
                 part += 1

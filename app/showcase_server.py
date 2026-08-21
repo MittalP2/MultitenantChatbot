@@ -1,10 +1,12 @@
 """
-Week 1 HTML showcase + live chatbot.
+HTML showcase + live chatbot.
 
 Usage (from project root):
   py -3.12 app/showcase_server.py
 
-Then open http://127.0.0.1:8765
+Then open:
+  http://127.0.0.1:8765         Week 2 SEC 10-K comparison
+  http://127.0.0.1:8765/week1   Week 1 BMW
 """
 
 from __future__ import annotations
@@ -22,20 +24,40 @@ from dotenv import load_dotenv
 
 load_dotenv(ROOT / ".env")
 
-from chat.chatbot import answer_question
+from chat.chatbot import _extractive_answer, answer_question
+from retrieval.finance_retriever import hits_payload, retrieve_finance
 
-HTML_PATH = ROOT / "docs" / "week1-showcase.html"
-STORE_DIR = ROOT / "storage" / "bmw"
+HTML_WEEK1 = ROOT / "docs" / "week1-showcase.html"
+HTML_WEEK2 = ROOT / "docs" / "week2-showcase.html"
+REPORT_PATH = ROOT / "eval" / "COMPARISON_REPORT.md"
+BMW_STORE = ROOT / "storage" / "bmw"
+SEC_FIXED = ROOT / "storage" / "sec_fixed"
+SEC_SEMANTIC = ROOT / "storage" / "sec_semantic"
 HOST = "127.0.0.1"
 PORT = 8765
 
 
-def _store_ready() -> bool:
+def _store_ready(store_dir: Path) -> bool:
     return (
-        (STORE_DIR / "chunks.json").exists()
-        and (STORE_DIR / "tfidf_matrix.npy").exists()
-        and (STORE_DIR / "tfidf_model.json").exists()
+        (store_dir / "chunks.json").exists()
+        and (store_dir / "tfidf_matrix.npy").exists()
+        and (store_dir / "tfidf_model.json").exists()
     )
+
+
+def _sec_ready() -> bool:
+    return _store_ready(SEC_FIXED) and _store_ready(SEC_SEMANTIC)
+
+
+def _pack_hits(question: str, persist_dir: Path, use_rerank: bool) -> dict:
+    hits = retrieve_finance(
+        question,
+        persist_dir=persist_dir,
+        top_k=5,
+        tenant_id="sec",
+        use_rerank=use_rerank,
+    )
+    return {"hits": hits_payload(hits)}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -56,12 +78,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
-        if path in {"/", "/index.html", "/week1-showcase.html"}:
-            html = HTML_PATH.read_bytes()
-            self._send(200, html, "text/html; charset=utf-8")
+        if path in {"/", "/index.html", "/week2", "/week2.html"}:
+            self._send(200, HTML_WEEK2.read_bytes(), "text/html; charset=utf-8")
+            return
+        if path in {"/week1", "/week1-showcase.html"}:
+            self._send(200, HTML_WEEK1.read_bytes(), "text/html; charset=utf-8")
+            return
+        if path == "/report":
+            body = REPORT_PATH.read_bytes() if REPORT_PATH.exists() else b"Run eval/run_eval.py first."
+            self._send(200, body, "text/markdown; charset=utf-8")
             return
         if path == "/api/health":
-            ready = _store_ready()
+            ready = _store_ready(BMW_STORE)
             self._json(
                 200,
                 {
@@ -74,13 +102,24 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path == "/api/health-sec":
+            ready = _sec_ready()
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "tenant": "sec",
+                    "store": ready,
+                    "hint": None
+                    if ready
+                    else "Run: py -3.12 ingestion/run_ingest_sec.py",
+                },
+            )
+            return
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path != "/api/ask":
-            self._json(404, {"error": "not found"})
-            return
         length = int(self.headers.get("Content-Length") or 0)
         try:
             data = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
@@ -91,41 +130,85 @@ class Handler(BaseHTTPRequestHandler):
         if not question:
             self._json(400, {"error": "question is required"})
             return
-        if not _store_ready():
-            self._json(
-                503,
+
+        if path == "/api/ask":
+            if not _store_ready(BMW_STORE):
+                self._json(
+                    503,
+                    {
+                        "error": "BMW vector store not found. Run: py -3.12 ingestion/run_ingest.py"
+                    },
+                )
+                return
+            try:
+                answer, chunks = answer_question(question, top_k=5, tenant_id="bmw")
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+                return
+            sources = [
                 {
-                    "error": "BMW vector store not found. Run: py -3.12 ingestion/run_ingest.py"
-                },
-            )
+                    "document": c.get("document"),
+                    "page": c.get("page"),
+                    "score": round(float(c.get("score") or 0), 3),
+                }
+                for c in chunks
+            ]
+            self._json(200, {"answer": answer, "sources": sources})
             return
-        try:
-            answer, chunks = answer_question(question, top_k=5, tenant_id="bmw")
-        except Exception as exc:
-            self._json(500, {"error": str(exc)})
+
+        if path in {"/api/compare", "/api/ask-sec"}:
+            if not _sec_ready():
+                self._json(
+                    503,
+                    {
+                        "error": "SEC indexes missing. Run: py -3.12 ingestion/run_ingest_sec.py"
+                    },
+                )
+                return
+            try:
+                conditions = {
+                    "fixed_plain": _pack_hits(question, SEC_FIXED, False),
+                    "fixed_rerank": _pack_hits(question, SEC_FIXED, True),
+                    "semantic_plain": _pack_hits(question, SEC_SEMANTIC, False),
+                    "semantic_rerank": _pack_hits(question, SEC_SEMANTIC, True),
+                }
+                payload = {"conditions": conditions}
+                if data.get("answer", True) or path == "/api/ask-sec":
+                    winner = retrieve_finance(
+                        question,
+                        persist_dir=SEC_FIXED,
+                        top_k=5,
+                        tenant_id="sec",
+                        use_rerank=True,
+                    )
+                    payload["answer"] = _extractive_answer(question, winner)
+                    payload["sources"] = [
+                        {
+                            "document": c.get("document"),
+                            "page": c.get("page"),
+                            "score": round(float(c.get("score") or 0), 3),
+                        }
+                        for c in winner
+                    ]
+            except Exception as exc:
+                self._json(500, {"error": str(exc)})
+                return
+            self._json(200, payload)
             return
-        sources = [
-            {
-                "document": c.get("document"),
-                "page": c.get("page"),
-                "score": round(float(c.get("score") or 0), 3),
-            }
-            for c in chunks
-        ]
-        self._json(200, {"answer": answer, "sources": sources})
+
+        self._json(404, {"error": "not found"})
 
 
 def main() -> None:
-    if not HTML_PATH.exists():
-        raise SystemExit(f"Missing {HTML_PATH}")
+    if not HTML_WEEK1.exists() or not HTML_WEEK2.exists():
+        raise SystemExit("Missing docs/week1-showcase.html or docs/week2-showcase.html")
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-    if not _store_ready():
-        print(
-            f"Warning: no index in {STORE_DIR}. Run: py -3.12 ingestion/run_ingest.py",
-            flush=True,
-        )
-    print(f"Showcase + chatbot: http://{HOST}:{PORT}", flush=True)
-    print("Demo questions: employees 2025 · revenues 2025 · EBIT margin 2025", flush=True)
+    print(f"Week 2 10-K: http://{HOST}:{PORT}", flush=True)
+    print(f"Week 1 BMW:  http://{HOST}:{PORT}/week1", flush=True)
+    if not _store_ready(BMW_STORE):
+        print("  BMW index missing → py -3.12 ingestion/run_ingest.py", flush=True)
+    if not _sec_ready():
+        print("  SEC indexes missing → py -3.12 ingestion/run_ingest_sec.py", flush=True)
     print("Press Ctrl+C to stop.", flush=True)
     try:
         server.serve_forever()

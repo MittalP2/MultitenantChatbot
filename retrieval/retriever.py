@@ -10,7 +10,12 @@ from ingestion.embedder import embed_texts, set_vectorizer, tokenize
 from retrieval.vector_store import SimpleVectorStore
 
 
-DEFAULT_STORE = Path(__file__).resolve().parents[1] / "storage" / "bmw"
+_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_STORE = _ROOT / "storage" / "bmw"
+STORE_BY_TENANT = {
+    "bmw": _ROOT / "storage" / "bmw",
+    "sec": _ROOT / "storage" / "sec_semantic",
+}
 
 # Map casual question language → wording used in BMW investor reports.
 _QUERY_EXPANSIONS: Tuple[Tuple[Set[str], str], ...] = (
@@ -51,6 +56,10 @@ _QUERY_EXPANSIONS: Tuple[Tuple[Set[str], str], ...] = (
         "Outlook key performance indicators forecast",
     ),
 )
+
+
+def store_dir_for(tenant_id: str) -> Path:
+    return STORE_BY_TENANT.get(tenant_id, DEFAULT_STORE)
 
 
 def get_store(persist_dir: Optional[Path] = None) -> SimpleVectorStore:
@@ -239,28 +248,33 @@ def retrieve(
     top_k: int = 5,
     tenant_id: str = "bmw",
     persist_dir: Optional[Path] = None,
+    use_rerank: bool = True,
 ) -> List[Dict]:
-    store = get_store(persist_dir)
-    expanded = expand_query(question)
+    store = get_store(persist_dir or store_dir_for(tenant_id))
+    expanded = expand_query(question) if tenant_id == "bmw" else question
     query_vec = embed_texts([expanded])
-    # Over-fetch dense semantic candidates, then merge lexical KPI hits.
     candidates = store.search(
         query_vec, top_k=max(top_k * 12, 80), tenant_id=tenant_id
     )
-    lexical = _keyword_candidates(store, question, limit=40)
-    if tenant_id is not None:
+
+    if tenant_id == "bmw":
+        lexical = _keyword_candidates(store, question, limit=40)
         lexical = [c for c in lexical if c.get("tenant_id") == tenant_id]
+        merged: Dict[str, Dict] = {}
+        for c in candidates + lexical:
+            key = c.get("chunk_id") or f"{c.get('document')}:{c.get('page')}:{c.get('text', '')[:80]}"
+            prev = merged.get(key)
+            if prev is None or float(c.get("score", 0)) > float(prev.get("score", 0)):
+                merged[key] = dict(c)
+        pool = list(merged.values())
+        for c in pool:
+            c["score"] = float(c.get("score", 0.0)) + _lexical_bonus(question, c)
+        pool.sort(key=lambda c: c["score"], reverse=True)
+        return pool[:top_k]
 
-    merged: Dict[str, Dict] = {}
-    for c in candidates + lexical:
-        key = c.get("chunk_id") or f"{c.get('document')}:{c.get('page')}:{c.get('text', '')[:80]}"
-        prev = merged.get(key)
-        if prev is None or float(c.get("score", 0)) > float(prev.get("score", 0)):
-            merged[key] = dict(c)
+    if use_rerank:
+        from retrieval.reranker import rerank
 
-    pool = list(merged.values())
-    for c in pool:
-        c["score"] = float(c.get("score", 0.0)) + _lexical_bonus(question, c)
-    pool.sort(key=lambda c: c["score"], reverse=True)
-    return pool[:top_k]
+        return rerank(question, candidates[:20], top_k=top_k)
+    return candidates[:top_k]
 

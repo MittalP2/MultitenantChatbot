@@ -1,58 +1,83 @@
-# AutoChat
+# Financial Document Intelligence (RAG) — Lyzr
 
-A RAG chatbot over automotive investor reports. The long-term design is **multi-tenant**: each OEM’s documents stay isolated, and isolation is enforced at **retrieval**, not by telling the model “only use Toyota docs.”
+Week 2 project: a RAG pipeline over three SEC **10-K extracts** (Tesla, Harley-Davidson, Polaris). I built it in **Lyzr Studio**: two Knowledge Bases with different chunk sizes, **two agents** (one per KB), and the same questions on both so retrieval can be compared.
 
-This app currently answers from **BMW Group PDFs**. Search runs locally. An LLM (Cursor by default) writes the answer from the retrieved passages only.
+Corpus is Item 1 (Business), Item 1A (Risk Factors), and Item 7 (MD&A) only — not the full iXBRL HTML.
 
-```text
-PDF → chunks (document + page + tenant_id) → local TF-IDF index
-                                                    ↑
-Question → same vectorization → closest chunks → cited answer
-```
+## How I built it
 
-Local retrieval is the librarian. The model is the writer. It never searches the PDFs itself.
+### 1. Two agents
 
-## What it does
+Same Role / Goal / Instructions on both. The only difference is which Knowledge Base is attached.
 
-- Loads BMW PDFs from `data/bmw/`, splits pages into overlapping chunks
-- Stores TF-IDF vectors in `storage/bmw/` (not committed; PDFs stay local too)
-- Filters search by `tenant_id` (`bmw` today)
-- Returns an answer plus sources (filename + page)
-- Answer order: Cursor cloud → optional OpenAI → optional Ollama → extractive fallback
+- **Role:** Financial document analyst; answer only from the 10-K extracts (Tesla, Harley-Davidson, Polaris).
+- **Goal:** Short cited answers. If the filings do not contain it, say you do not know.
+- **Instructions:** Use only the knowledge base. Cite the source file. Do not mix companies. No investment advice.
 
-Set `CURSOR_API_KEY` in `.env` (see `.env.example`). On Windows keep `CURSOR_RUNTIME=cloud`.
+| Agent | Linked Knowledge Base | Chunking |
+| --- | --- | --- |
+| Fixed agent | `10k-fixed` | 800 / 150 |
+| Semantic agent | `10k-semantic` | 1600 / 200 |
 
-## Setup
+Each agent uses **Basic** retrieval with **top-k = 5** (not Agentic), so the chunking comparison stays measurable.
 
-Python 3.10+ (3.12 recommended):
+I did **not** put both KBs on one agent. That would mix 800- and 1600-character windows.
+
+### 2. Vector store (required)
+
+Training failed with `500: Training Error: 'credentials'` until Qdrant/Lyzr **vector-store credentials** were saved under Connections.
+
+Use the **Lyzr-hosted Qdrant** connection (the one that actually has saved credentials). Creating a KB with an empty Qdrant slot will 500 on every upload, including paste.
+
+Embeddings: **`text-embedding-3-small`** (OpenAI key connected in **Connections → Models**).
+
+### 3. Two Knowledge Bases (same files, different chunks)
+
+| Knowledge Base | Parser | Chunk size | Overlap | Retrieval |
+| --- | --- | --- | --- | --- |
+| `10k-fixed` | PyPDF | **800** | **150** | Basic, top-k **5** |
+| `10k-semantic` | PyPDF | **1600** | **200** | Basic, top-k **5** |
+
+The **same three PDFs** are in both KBs. Same vector-store credential. Same embedding model.
+
+Lyzr does not run a custom “split on sentence similarity” chunker. For Studio, **larger chunks** are the semantic comparison.
+
+### 4. Files I uploaded
+
+Plain `.txt` extracts did not upload reliably. I converted them to PDFs and uploaded from:
+
+`data/sec/lyzr_pdfs/`
+
+(the three company PDFs: Tesla, Harley-Davidson, Polaris — one file at a time; well under Lyzr’s 15 MB / 5-file batch limits.)
+
+Source extracts: `data/sec/*_10K_*.txt`
+
+To regenerate PDFs:
 
 ```bash
 py -3.12 -m pip install -r requirements.txt
+py -3.12 scripts/txt_to_lyzr_pdf.py
 ```
 
-Put BMW reports in `data/bmw/` ([data/MANUAL_DOWNLOADS.md](data/MANUAL_DOWNLOADS.md)). Copy `.env.example` to `.env` and add your key from [cursor.com/dashboard/integrations](https://cursor.com/dashboard/integrations).
+## Test questions
 
-```bash
-py -3.12 ingestion/run_ingest.py
-py -3.12 app/cli_chat.py
-py -3.12 app/cli_chat.py "What were BMW Group revenues in 2025?"
-py -3.12 app/showcase_server.py
-```
+Use the 12 questions in [eval/queries.json](eval/queries.json). A hit is a retrieved passage from the **right company** that contains an expected term (e.g. Tesla + energy/storage, Harley + LiveWire/dealer, Polaris + ORV/Indian).
 
-Showcase UI: [http://127.0.0.1:8765](http://127.0.0.1:8765) (server required). Optional: `py -3.12 -m streamlit run app/streamlit_app.py`.
+Run the **same** question on the **fixed agent** and the **semantic agent**.
 
-## Layout
+Examples:
 
-```text
-app/          CLI, Streamlit, HTML showcase server
-chat/         Answer routing
-ingestion/    PDF load, chunk, TF-IDF
-retrieval/    Vector store + retriever
-data/         OEM PDFs (local)
-storage/      Index (local)
-PRD.md        Product concept
-```
+- What products and services does Tesla sell besides electric cars?
+- What competition risks does Tesla disclose in its 10-K?
+- What is Harley-Davidson's core motorcycle business and how is it organized?
+- What vehicle categories does Polaris sell, such as off-road, motorcycles, or boats?
+
+## What I would tell a grader
+
+1. Open the **fixed** agent, ask a Tesla / Harley / Polaris question; show the citation.
+2. Ask the **same** question on the **semantic** agent; compare which window is more usable.
+3. Explain: two indexes, two agents, Basic retrieval, top-k 5; chunk size/overlap is the only intentional difference.
 
 ## License
 
-MIT. Investor-report PDFs are not in this repo.
+MIT. Full EDGAR HTML is not in this repo.

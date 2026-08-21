@@ -19,14 +19,26 @@ import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from retrieval.finance_retriever import retrieve_finance
 from retrieval.retriever import retrieve
 
-SYSTEM_PROMPT = """You are a BMW financial assistant.
+ROOT = Path(__file__).resolve().parents[1]
+
+BMW_SYSTEM_PROMPT = """You are a BMW financial assistant.
 Answer ONLY using the provided context from BMW investor reports.
 If the context does not contain the answer, say you don't know.
 Be concise. Include specific figures when present in the context.
 Cite the document name and page for key figures.
 """
+
+SEC_SYSTEM_PROMPT = """You are a financial document assistant for SEC 10-K filings.
+Answer ONLY using the provided context (Item 1 Business, Item 1A Risk Factors, Item 7 MD&A).
+If the context does not contain the answer, say you don't know.
+Be concise. Include specific figures when present in the context.
+Cite the document name and page for key figures.
+"""
+
+SYSTEM_PROMPT = BMW_SYSTEM_PROMPT
 
 
 def build_context(chunks: List[Dict]) -> str:
@@ -204,10 +216,15 @@ def _extractive_answer(question: str, chunks: List[Dict]) -> str:
     return "\n".join(lines)
 
 
-def _user_prompt(question: str, context: str) -> str:
+def _system_prompt(tenant_id: str) -> str:
+    return SEC_SYSTEM_PROMPT if tenant_id == "sec" else BMW_SYSTEM_PROMPT
+
+
+def _user_prompt(question: str, context: str, tenant_id: str = "bmw") -> str:
+    label = "SEC 10-K extracts" if tenant_id == "sec" else "BMW investor reports"
     return (
-        f"{SYSTEM_PROMPT}\n\n"
-        f"Context from BMW investor reports:\n{context}\n\n"
+        f"{_system_prompt(tenant_id)}\n\n"
+        f"Context from {label}:\n{context}\n\n"
         f"Question: {question}\n\n"
         "Answer based only on the context. "
         "Mention document names and pages when you cite a figure. "
@@ -240,7 +257,9 @@ def _http_json(
     return json.loads(raw) if raw else {}
 
 
-def _answer_with_cursor_cloud(question: str, context: str, api_key: str) -> Optional[str]:
+def _answer_with_cursor_cloud(
+    question: str, context: str, api_key: str, tenant_id: str = "bmw"
+) -> Optional[str]:
     """
     Cloud Agents HTTPS API (no local bridge).
 
@@ -251,10 +270,10 @@ def _answer_with_cursor_cloud(question: str, context: str, api_key: str) -> Opti
 
     headers = _cursor_headers(api_key)
     model = (os.getenv("CURSOR_MODEL") or "composer-2.5").strip()
-    prompt = _user_prompt(question, context)
+    prompt = _user_prompt(question, context, tenant_id)
     create_body: Dict = {
         "prompt": {"text": prompt},
-        "name": "AutoChat BMW Q&A",
+        "name": "AutoChat SEC Q&A" if tenant_id == "sec" else "AutoChat BMW Q&A",
     }
     # "default" = Auto; otherwise pass explicit model id from /v1/models
     if model and model.lower() not in {"auto", "default"}:
@@ -328,7 +347,9 @@ def _answer_with_cursor_cloud(question: str, context: str, api_key: str) -> Opti
     return str(result_text).strip() or None
 
 
-def _answer_with_cursor_local(question: str, context: str, api_key: str) -> Optional[str]:
+def _answer_with_cursor_local(
+    question: str, context: str, api_key: str, tenant_id: str = "bmw"
+) -> Optional[str]:
     """Local SDK path (often broken on Windows bridge startup)."""
     try:
         from cursor_sdk import Agent, AgentOptions, LocalAgentOptions
@@ -344,13 +365,13 @@ def _answer_with_cursor_local(question: str, context: str, api_key: str) -> Opti
     with tempfile.TemporaryDirectory(prefix="autochat-cursor-") as tmp:
         ctx_path = Path(tmp) / "CONTEXT.md"
         ctx_path.write_text(
-            "# Retrieved BMW report passages\n\n" + context,
+            "# Retrieved report passages\n\n" + context,
             encoding="utf-8",
         )
         prompt = (
             "Read CONTEXT.md in this folder if helpful. "
-            "Answer the question using ONLY the BMW report passages below.\n\n"
-            + _user_prompt(question, context)
+            "Answer the question using ONLY the retrieved passages below.\n\n"
+            + _user_prompt(question, context, tenant_id)
         )
         try:
             result = Agent.prompt(
@@ -373,7 +394,9 @@ def _answer_with_cursor_local(question: str, context: str, api_key: str) -> Opti
     return str(text).strip() or None
 
 
-def _answer_with_cursor(question: str, context: str) -> Optional[str]:
+def _answer_with_cursor(
+    question: str, context: str, tenant_id: str = "bmw"
+) -> Optional[str]:
     """Call Cursor. Default = cloud API (Windows-safe); optional local SDK."""
     api_key = (os.getenv("CURSOR_API_KEY") or "").strip()
     if not api_key or api_key.startswith("cursor_your-key"):
@@ -381,18 +404,20 @@ def _answer_with_cursor(question: str, context: str) -> Optional[str]:
 
     runtime = (os.getenv("CURSOR_RUNTIME") or "cloud").strip().lower()
     if runtime == "local":
-        return _answer_with_cursor_local(question, context, api_key)
-    return _answer_with_cursor_cloud(question, context, api_key)
+        return _answer_with_cursor_local(question, context, api_key, tenant_id)
+    return _answer_with_cursor_cloud(question, context, api_key, tenant_id)
 
 
-def _answer_with_ollama(question: str, context: str) -> Optional[str]:
+def _answer_with_ollama(
+    question: str, context: str, tenant_id: str = "bmw"
+) -> Optional[str]:
     host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
     model = os.getenv("OLLAMA_MODEL", "llama3.2")
     payload = {
         "model": model,
         "stream": False,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _system_prompt(tenant_id)},
             {
                 "role": "user",
                 "content": (
@@ -418,7 +443,9 @@ def _answer_with_ollama(question: str, context: str) -> Optional[str]:
         return None
 
 
-def _answer_with_openai(question: str, context: str) -> Optional[str]:
+def _answer_with_openai(
+    question: str, context: str, tenant_id: str = "bmw"
+) -> Optional[str]:
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key or api_key.startswith("sk-your-key"):
         return None
@@ -432,7 +459,7 @@ def _answer_with_openai(question: str, context: str) -> Optional[str]:
         model=model,
         temperature=0.1,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _system_prompt(tenant_id)},
             {
                 "role": "user",
                 "content": (
@@ -451,16 +478,33 @@ def answer_question(
     question: str,
     top_k: int = 5,
     tenant_id: str = "bmw",
+    use_rerank: Optional[bool] = None,
+    strategy: str = "fixed",
 ) -> Tuple[str, List[Dict]]:
-    chunks = retrieve(question, top_k=top_k, tenant_id=tenant_id)
+    if tenant_id == "sec":
+        if strategy not in {"fixed", "semantic"}:
+            raise ValueError("strategy must be fixed or semantic")
+        store = ROOT / "storage" / f"sec_{strategy}"
+        rerank = True if use_rerank is None else use_rerank
+        chunks = retrieve_finance(
+            question,
+            persist_dir=store,
+            top_k=top_k,
+            tenant_id="sec",
+            use_rerank=rerank,
+        )
+        empty_msg = "I couldn't find relevant passages in the SEC 10-K extracts."
+    else:
+        chunks = retrieve(question, top_k=top_k, tenant_id=tenant_id)
+        empty_msg = "I couldn't find relevant passages in the BMW documents."
     if not chunks:
-        return "I couldn't find relevant passages in the BMW documents.", []
+        return empty_msg, []
 
     context = build_context(chunks)
 
     # Cursor → OpenAI (later) → Ollama → extractive fallback
     for provider in (_answer_with_cursor, _answer_with_openai, _answer_with_ollama):
-        answer = provider(question, context)
+        answer = provider(question, context, tenant_id)
         if answer:
             return answer, chunks
 

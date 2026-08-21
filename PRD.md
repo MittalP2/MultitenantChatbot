@@ -22,6 +22,18 @@ Planned tenants: Toyota, BMW, Mercedes-Benz, Ford, Honda. Each chunk carries `te
 
 ## What exists now
 
+### Week 2 — financial 10-K RAG (submission track)
+
+| Piece | Implementation |
+| --- | --- |
+| Corpus | Tesla, Harley-Davidson, Polaris 10-K extracts (`data/sec/`) — Item 1, 1A, 7 |
+| Chunking | Fixed-size (800/150) vs semantic (heading + sentence TF-IDF groups) |
+| Rerank | Top-20 TF-IDF → phrase/year/ticker overlap → top 5 |
+| Eval | 12 questions, Hit@5 / MRR / nDCG@5, `eval/COMPARISON_REPORT.md` |
+| Demo | http://127.0.0.1:8765 and `cli_chat.py --tenant sec` |
+
+### Week 1 — BMW tenant chat
+
 Single-tenant RAG for **BMW**.
 
 | Piece | Implementation |

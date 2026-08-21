@@ -23,6 +23,9 @@ storage/
 # Large source PDFs (keep local; document how to obtain)
 data/**/*.pdf
 
+# Raw EDGAR HTML (10-K iXBRL is huge); keep the small .txt extracts
+data/sec/_raw/
+
 # App / OS
 .streamlit/
 .DS_Store

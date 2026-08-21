@@ -1,84 +1,57 @@
 # Financial Document Intelligence (RAG) — Lyzr
 
-Week 2 project: a RAG pipeline over three SEC **10-K extracts** (Tesla, Harley-Davidson, Polaris). I built it in **Lyzr Studio**: two Knowledge Bases with different chunk sizes, **two agents** (one per KB), and the same questions on both so retrieval can be compared.
+Week 2: a RAG pipeline over three SEC 10-K extracts (Tesla, Harley-Davidson, Polaris), built in **Lyzr Studio**. Two Knowledge Bases used different chunk sizes. Two agents used the same Role, Goal, and Instructions. The same six questions were asked on both agents so chunking could be compared.
 
 Corpus is Item 1 (Business), Item 1A (Risk Factors), and Item 7 (MD&A) only — not the full iXBRL HTML.
 
-## How I built it
+**Result:** both agents retrieved the right filings. Larger chunks (1600 / 200) produced slightly fuller answers. Smaller chunks (800 / 150) already had the facts. BMW 2025 revenue (not in the corpus) was refused by both. Rerank was not run.
 
-### 1. Two agents
+Reports: [eval/Lyzr_Financial_RAG_Comparison_Report.docx](eval/Lyzr_Financial_RAG_Comparison_Report.docx) (Drive / Word) and [eval/LYZR_COMPARISON.md](eval/LYZR_COMPARISON.md) (notes).
 
-Same Role / Goal / Instructions on both. The only difference is which Knowledge Base is attached.
+## What was built
 
-- **Role:** Financial document analyst; answer only from the 10-K extracts (Tesla, Harley-Davidson, Polaris).
-- **Goal:** Short cited answers. If the filings do not contain it, say you do not know.
-- **Instructions:** Use only the knowledge base. Cite the source file. Do not mix companies. No investment advice.
+### Two agents, two Knowledge Bases
 
-| Agent | Linked Knowledge Base | Chunking |
-| --- | --- | --- |
-| Fixed agent | `10k-fixed` | 800 / 150 |
-| Semantic agent | `10k-semantic` | 1600 / 200 |
+Role, Goal, and Instructions were identical. The only intentional difference was which KB was attached (chunk size / overlap).
 
-Each agent uses **Basic** retrieval with **top-k = 5** (not Agentic), so the chunking comparison stays measurable.
+| Agent | Knowledge Base | Chunk / overlap | Retrieval |
+| --- | --- | --- | --- |
+| Fixed | `10k-fixed` | 800 / 150 | Basic, top-k 5 |
+| Semantic | `10k-semantic` | 1600 / 200 | Basic, top-k 5 |
 
-I did **not** put both KBs on one agent. That would mix 800- and 1600-character windows.
+Both used PyPDF, `text-embedding-3-small`, and the same Lyzr-hosted Qdrant credential. Both KBs hold the same three PDFs. Retrieval was Basic, not Agentic. Both KBs were not attached to one agent.
 
-### 2. Vector store (required)
+In Lyzr, “semantic” means larger topical windows (1600 / 200), not a custom sentence-similarity splitter.
 
-Training failed with `500: Training Error: 'credentials'` until Qdrant/Lyzr **vector-store credentials** were saved under Connections.
+Training failed with `500: Training Error: 'credentials'` until vector-store credentials were saved. Empty Qdrant slots 500 on every upload, including paste. File size was not the cause.
 
-Use the **Lyzr-hosted Qdrant** connection (the one that actually has saved credentials). Creating a KB with an empty Qdrant slot will 500 on every upload, including paste.
+### Files uploaded
 
-Embeddings: **`text-embedding-3-small`** (OpenAI key connected in **Connections → Models**).
-
-### 3. Two Knowledge Bases (same files, different chunks)
-
-| Knowledge Base | Parser | Chunk size | Overlap | Retrieval |
-| --- | --- | --- | --- | --- |
-| `10k-fixed` | PyPDF | **800** | **150** | Basic, top-k **5** |
-| `10k-semantic` | PyPDF | **1600** | **200** | Basic, top-k **5** |
-
-The **same three PDFs** are in both KBs. Same vector-store credential. Same embedding model.
-
-Lyzr does not run a custom “split on sentence similarity” chunker. For Studio, **larger chunks** are the semantic comparison.
-
-### 4. Files I uploaded
-
-Plain `.txt` extracts did not upload reliably. I converted them to PDFs and uploaded from:
-
-`data/sec/lyzr_pdfs/`
-
-(the three company PDFs: Tesla, Harley-Davidson, Polaris — one file at a time; well under Lyzr’s 15 MB / 5-file batch limits.)
-
-Source extracts: `data/sec/*_10K_*.txt`
-
-To regenerate PDFs:
+Plain `.txt` extracts did not upload. They were converted to PDF and uploaded from `data/sec/lyzr_pdfs/` (Tesla, Harley-Davidson, Polaris — one file at a time). Source extracts: `data/sec/*_10K_*.txt`.
 
 ```bash
 py -3.12 -m pip install -r requirements.txt
 py -3.12 scripts/txt_to_lyzr_pdf.py
 ```
 
-## Test questions
+## Questions that were actually asked
 
-Use the 12 questions in [eval/queries.json](eval/queries.json). A hit is a retrieved passage from the **right company** that contains an expected term (e.g. Tesla + energy/storage, Harley + LiveWire/dealer, Polaris + ORV/Indian).
+These six, identical wording on the fixed agent then the semantic agent.
 
-Run the **same** question on the **fixed agent** and the **semantic agent**.
+| # | Question | Fixed | Semantic | More usable |
+| --- | --- | --- | --- | --- |
+| 1 | What else does Tesla sell besides cars? | Yes | Yes | Tie |
+| 2 | What risks does Harley-Davidson disclose about dealers? | Yes | Yes | Semantic |
+| 3 | What happened to Indian Motorcycle at Polaris? | Yes | Yes | Tie |
+| 4 | What is LiveWire? | Yes | Yes | Semantic |
+| 5 | What is Autopilot? | Partial | Partial | Semantic |
+| 6 | What was BMW Group revenue in 2025? (not in corpus) | Correct refuse | Correct refuse | Tie |
 
-Fill the Lyzr report as you go: [eval/LYZR_COMPARISON.md](eval/LYZR_COMPARISON.md). Lyzr does not generate this file automatically.
+Scoring: Yes = an analyst could use the answer; Partial = right company but thin or missing a named definition; Correct refuse = “I don’t know” on a question not in the filings.
 
-Examples:
+In-corpus: both 4 Yes + 1 Partial. Out-of-corpus: 2/2 correct refuses. Autopilot was Partial because the extracts have no standalone “Autopilot” definition; semantic also pulled neighboring FSD language.
 
-- What products and services does Tesla sell besides electric cars?
-- What competition risks does Tesla disclose in its 10-K?
-- What is Harley-Davidson's core motorcycle business and how is it organized?
-- What vehicle categories does Polaris sell, such as off-road, motorcycles, or boats?
-
-## What I would tell a grader
-
-1. Open the **fixed** agent, ask a Tesla / Harley / Polaris question; show the citation.
-2. Ask the **same** question on the **semantic** agent; compare which window is more usable.
-3. Explain: two indexes, two agents, Basic retrieval, top-k 5; chunk size/overlap is the only intentional difference.
+Rerank was not turned on. The comparison is chunking only (800/150 vs 1600/200).
 
 ## License
 
